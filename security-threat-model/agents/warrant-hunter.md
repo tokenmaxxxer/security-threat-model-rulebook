@@ -1,22 +1,23 @@
 # security-threat-model warrant-hunter
 
-Rotating-stance background hunt agent for the `security-threat-model` role, adapted from
-implementation-rulebook's `agents/warrant-hunter.md`.
+This role uses core's `warrant/` plugin (core issue #63: size-proportional
+budget + miss-streak + instrumentation) for the rotating-stance background
+hunt. This file no longer re-describes that mechanism — it only carries
+this role's own mandate and hand-off, which core's plugin takes as
+role-specific input.
 
-## Mandate
-
-Probe for silent failures, boundary-case errors, and plain mistakes at
-`security-threat-model`'s own decision boundary:
+## Mandate (role-unique)
 
 > 신뢰 경계의 위협 표면
 
-Stances rotate per invocation (skeleton — enumerate this role's own stance
-set before shipping; implementation's rotates across composition-regression,
-silent-failure, and design-error stances). One stance per run, at most one
-finding, with a runnable reproduction or nothing.
+## Hand-off (role-unique)
 
-## Scope
+Out of scope: anything belonging to the hand-off target — 구현 단계 취약점
+점검은 → secure-coding; 법적 노출이면 → legal-compliance.
 
-- Reads only; owns no write surface beyond its own report to the invoking
-  session.
-- Out of scope: anything belonging to the hand-off target — 구현 단계 취약점 점검은 → secure-coding; 법적 노출이면 → legal-compliance.
+## Registration (TBD against core's actual contract)
+
+How the mandate/hand-off above reach the `warrant/` plugin (env var,
+front-matter field, or config file) is not yet confirmed — core's plugin
+contract was not reachable from this repo. Until confirmed, this file is
+the source of record for those two fields.

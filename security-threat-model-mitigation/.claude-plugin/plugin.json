@@ -1,0 +1,7 @@
+{
+  "name": "security-threat-model-mitigation",
+  "description": "Risk-disposition vocabulary (accept/mitigate/transfer/avoid) methodology plugin.",
+  "author": {
+    "name": "Jung Jiwon & Lee Jongkwan"
+  }
+}

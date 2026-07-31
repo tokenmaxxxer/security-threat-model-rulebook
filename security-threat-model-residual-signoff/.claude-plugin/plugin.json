@@ -1,0 +1,7 @@
+{
+  "name": "security-threat-model-residual-signoff",
+  "description": "Residual-risk sign-off methodology plugin: approvers.md reference discipline on residual-risk-note.",
+  "author": {
+    "name": "Jung Jiwon & Lee Jongkwan"
+  }
+}

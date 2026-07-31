@@ -7,7 +7,32 @@
     {
       "name": "security-threat-model",
       "source": "./security-threat-model",
-      "description": "The security-threat-model role on contract v3 (issue-160 round-3 promotion). Decides: 신뢰 경계의 위협 표면."
+      "description": "The security-threat-model role on contract v3 (issue-160 round-3 promotion). Decides: 신뢰 경계의 위협 표면. Base plugin: role identity, hand-off, generic field-presence gate, phase-1 sequence precondition."
+    },
+    {
+      "name": "security-threat-model-stride",
+      "source": "./security-threat-model-stride",
+      "description": "STRIDE threat-enumeration methodology plugin: asset-inventory/trust-boundary-map precondition ordering and STRIDE-category tagging on stride-table."
+    },
+    {
+      "name": "security-threat-model-risk-rating",
+      "source": "./security-threat-model-risk-rating",
+      "description": "CVSS-default / DREAD-marked-override risk-rating methodology plugin."
+    },
+    {
+      "name": "security-threat-model-mitigation",
+      "source": "./security-threat-model-mitigation",
+      "description": "Risk-disposition vocabulary (accept/mitigate/transfer/avoid) methodology plugin."
+    },
+    {
+      "name": "security-threat-model-residual-signoff",
+      "source": "./security-threat-model-residual-signoff",
+      "description": "Residual-risk sign-off methodology plugin: approvers.md reference discipline on residual-risk-note."
+    },
+    {
+      "name": "security-threat-model-canon-citation",
+      "source": "./security-threat-model-canon-citation",
+      "description": "No-copy canon-citation discipline methodology plugin on canon-references."
     }
   ]
 }

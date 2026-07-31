@@ -7,7 +7,7 @@ source "${CORE_HOOKS_LIB_DIR:-${CLAUDE_PLUGIN_ROOT}/../core/hooks/lib}/role-dire
 ROLE="security-threat-model"
 DECIDES="신뢰 경계의 위협 표면"
 USE_WHEN="스펙에 신뢰 경계·인증·민감데이터가 걸릴 때"
-PRODUCES="STRIDE table, mitigation list per threat, residual risk note"
+PRODUCES="asset inventory, trust boundary map (DFD), STRIDE table with CVSS-style risk rating per threat, mitigation list per threat (accept/mitigate/transfer/avoid), residual risk note with approver reference, canon references"
 WRITE_SCOPE=""
 HAND_OFF="구현 단계 취약점 점검은 → secure-coding; 법적 노출이면 → legal-compliance"
 BOUNDARY_CASE="if the work in front of you drifts outside decides above, stop and hand off per the arrow — do not silently absorb another role's scope. Record the hand-off point in this role's record before opening the next role's session."

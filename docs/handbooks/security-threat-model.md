@@ -1,5 +1,26 @@
 # security-threat-model — operational handbook
 
+## Methodology
+
+STRIDE is the enumeration framework for this role's threat tables — it is
+DFD/trust-boundary native and matches the role's mandate ("신뢰 경계의 위협
+표면"). Every phase-2 record must include an `asset-inventory` and a
+`trust-boundary-map` before its `stride-table`, since a threat row has no
+well-defined subject without them. Risk is rated on a CVSS-style qualitative
+severity scale (Critical/High/Medium/Low) by default; a DREAD-style
+qualitative override is permitted only for architectural/trust-boundary
+findings with no CVE-like vector, and must be marked inline in the row when
+used, never silently mixed with CVSS-style rows. `residual-risk-note`
+records the post-mitigation rating plus which `docs/specs/approvers.md`
+approver Approved and when — this repo's contract v3 s19 Approve gate is the
+sign-off, not a separate mechanism. `canon-references` cites any external
+canon relied on (e.g. core's `warrant/` plugin) by path/description only,
+per this issue's no-copy constraint.
+
+See `docs/issue-1/proposals/security-threat-model.md` for the full
+rationale trail and `docs/issue-1/reports/security-threat-model/
+scout-brief.md` for the field-norm sources it's grounded in.
+
 ## Hooks
 
 - `hooks/directive.sh` (SessionStart) — stub form. Sources

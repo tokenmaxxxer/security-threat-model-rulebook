@@ -1,0 +1,7 @@
+{
+  "name": "security-threat-model-stride",
+  "description": "STRIDE threat-enumeration methodology plugin: asset-inventory/trust-boundary-map precondition ordering and STRIDE-category tagging on stride-table.",
+  "author": {
+    "name": "Jung Jiwon & Lee Jongkwan"
+  }
+}

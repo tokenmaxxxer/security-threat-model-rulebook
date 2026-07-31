@@ -1,0 +1,7 @@
+{
+  "name": "security-threat-model-risk-rating",
+  "description": "CVSS-default / DREAD-marked-override risk-rating methodology plugin.",
+  "author": {
+    "name": "Jung Jiwon & Lee Jongkwan"
+  }
+}

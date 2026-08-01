@@ -128,12 +128,20 @@ scope and evidence. Every plugin's kill-switch env var now uses the fixed
 off-spelling, or any unrecognized value all leave it active.
 
 Each plugin's `hooks/tests/run-gate-lib-tests.sh` is the mandatory
-six-case suite (replace_all-honoring Edit/MultiEdit, malformed JSON,
+seven-case suite (replace_all-honoring Edit/MultiEdit, malformed JSON,
 unrecognized kill-switch value, absolute/`./`-prefixed paths, a
-Bash-tool write target) that `tests/run-gate-tests.sh` (repo root) now
-chains alongside each plugin's existing `directive.sh`/
-`methodology-gate.sh`/`deny-only-check.sh`/`parse-check.sh` checks.
-`core/hooks/tests/compliance-check.sh <plugin>/hooks` is the mechanical
-detector for a gate that has drifted back to hand-rolled kill-switch or
-reconstruction logic; run it against a plugin's `hooks/` directory to
-verify compliance.
+Bash-tool write target, and — issue-13, core #75's shape — a
+`missing-core` case asserting the gate denies when
+`CLAUDE_PLUGIN_ROOT_CORE` points at a nonexistent path) that
+`tests/run-gate-tests.sh` (repo root) now chains alongside each plugin's
+existing `directive.sh`/`methodology-gate.sh`/`deny-only-check.sh`/
+`parse-check.sh` checks. `core/hooks/tests/compliance-check.sh
+<plugin>/hooks` is the mechanical detector for a gate that has drifted
+back to hand-rolled kill-switch/reconstruction logic, or back to an
+unguarded `gate-lib.sh` source line; run it against a plugin's `hooks/`
+directory to verify compliance. Every gate's source line (`sequence-gate.sh:2`,
+`methodology-gate.sh:2`) carries a `||` fallback that denies (exit 2)
+before `gate_trap_fail_closed` is reached, so a failed source itself
+denies rather than silently falling through — see
+`docs/issue-13/proposals/security-threat-model.md` s1 and
+`docs/issue-13/reports/security-threat-model.md`.

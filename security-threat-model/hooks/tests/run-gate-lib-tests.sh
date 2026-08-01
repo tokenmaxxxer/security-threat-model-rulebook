@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
-# security-threat-model — the six mandatory gate-house-standard test cases (issue-10
-# proposal s8), run against this plugin's own gate as a real subprocess.
+# security-threat-model — the seven mandatory gate-house-standard test cases
+# (issue-10 proposal s8; 7th group added issue-13, mirroring core #75's own
+# bump to seven groups), run against this plugin's own gate as a real
+# subprocess.
 #
 # Harness shape follows tests/run-gate-tests.sh at this repo's root (temp
 # git repo per case, JSON PreToolUse payload on stdin, exit-code assertion:
@@ -141,6 +143,22 @@ bash_case() {
   rm -rf "$td"; report allow "$got" "Bash-tool write to the same target: currently a no-op (matcher is Write|Edit|MultiEdit)"
 }
 bash_case
+
+# --- mandatory case 7: missing-core -> CLAUDE_PLUGIN_ROOT_CORE pointed at a
+# nonexistent path must deny (exit 2), not silently allow. Regression test
+# for the guard added at sequence-gate.sh:2 (core #75's guard shape,
+# issue-13): before the guard, the unguarded source failed but
+# gate_trap_fail_closed was never reached to force the deny, so the gate
+# fell through and allowed.
+missing_core_case() {
+  td="$(mktd)"
+  printf '%s' "$(write_payload "$TARGET" "$DENY_CONTENT")" \
+    | env CLAUDE_PROJECT_DIR="$td" CLAUDE_PLUGIN_ROOT_CORE="$td/no-such-core" /bin/bash "$GATE" >/dev/null 2>&1
+  rc=$?; case "$rc" in 0) got=allow ;; 2) got=deny ;; *) got="exit-$rc" ;; esac
+  rm -rf "$td"
+  report deny "$got" "missing-core: CLAUDE_PLUGIN_ROOT_CORE pointed nowhere denies (issue-13/core #75 guard fix, not silent-allow)"
+}
+missing_core_case
 
 printf '\n== %d passed, %d failed ==\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]

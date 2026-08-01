@@ -1,13 +1,16 @@
 #!/usr/bin/env bash
-. "${CLAUDE_PLUGIN_ROOT_CORE:-$(cd "$(dirname "${BASH_SOURCE[0]}")/../../core" && pwd -P)}/hooks/lib/gate-lib.sh"
+. "${CLAUDE_PLUGIN_ROOT_CORE:-$(cd "$(dirname "${BASH_SOURCE[0]}")/../../core" && pwd -P)}/hooks/lib/gate-lib.sh" || { echo "methodology-gate.sh: cannot source gate-lib.sh" >&2; exit 2; }
 gate_trap_fail_closed
-# ^ fail-closed trap-at-top, from core's gate-lib.sh (core issue-72, adopted
-#   here by issue-10): any abnormal termination (failed source, set -u abort,
-#   unbound var) before the verdict logic runs is forced to exit 2 (DENY),
-#   since a PreToolUse hook treats any non-2 exit as NON-BLOCKING
-#   (fail-OPEN). Installed as the FIRST executable statement, above
-#   `set -uo pipefail`. gate-lib.sh is referenced by path, never vendored;
-#   sourcing it also exports GATE_LIB_PY for the Python judge below.
+# ^ fail-closed: the `||` guard on the source line above is what makes a
+#   failed source itself deny (exit 2) instead of silently no-op'ing past a
+#   missing gate-lib.sh; gate_trap_fail_closed then covers everything after
+#   a successful source (core issue-72, adopted here by issue-10; guard
+#   mandated by core #75). Any abnormal termination (set -u abort, unbound
+#   var) before the verdict logic runs is forced to exit 2 (DENY), since a
+#   PreToolUse hook treats any non-2 exit as NON-BLOCKING (fail-OPEN).
+#   Installed as the FIRST executable statement, above `set -uo pipefail`.
+#   gate-lib.sh is referenced by path, never vendored; sourcing it also
+#   exports GATE_LIB_PY for the Python judge below.
 # PreToolUse gate (Write|Edit|MultiEdit) — security-threat-model residual-risk
 # sign-off facet, on top of (never instead of) the core canon
 # record-fields-gate.sh's generic §20 fields.

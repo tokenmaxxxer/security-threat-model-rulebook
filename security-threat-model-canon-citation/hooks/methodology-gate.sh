@@ -1,6 +1,13 @@
 #!/usr/bin/env bash
-__fc(){ rc=$?; if [ "$rc" != 0 ] && [ "$rc" != 2 ]; then echo "fail-closed: gate aborted (rc=$rc)" >&2; exit 2; fi; }
-trap __fc EXIT
+. "${CLAUDE_PLUGIN_ROOT_CORE:-$(cd "$(dirname "${BASH_SOURCE[0]}")/../../core" && pwd -P)}/hooks/lib/gate-lib.sh"
+gate_trap_fail_closed
+# ^ fail-closed trap-at-top, from core's gate-lib.sh (core issue-72, adopted
+#   here by issue-10): any abnormal termination (failed source, set -u abort,
+#   unbound var) before the verdict logic runs is forced to exit 2 (DENY),
+#   since a PreToolUse hook treats any non-2 exit as NON-BLOCKING
+#   (fail-OPEN). Installed as the FIRST executable statement, above
+#   `set -uo pipefail`. gate-lib.sh is referenced by path, never vendored;
+#   sourcing it also exports GATE_LIB_PY for the Python judge below.
 # PreToolUse gate (Write|Edit|MultiEdit) — no-copy canon-citation
 # discipline, scoped to the `canon-references` record field specifically.
 # On top of (never instead of) the core canon record-fields-gate.sh's
@@ -24,16 +31,15 @@ trap __fc EXIT
 # it cannot detect paraphrased copies, copies split across edits, or
 # copies that avoid its heuristic tokens.
 #
-# Kill switch: export SECURITY_THREAT_MODEL_CANON_CITATION_GATE_OFF=1
+# Kill switch: export SECURITY_THREAT_MODEL_CANON_CITATION_GATE_OFF=1 (any other value — including a typo —
+# leaves the gate ACTIVE, per gate_kill_switch_active's fixed
+# on-spelling set 1/true/yes/on).
 set -uo pipefail
 
 role="${CLAUDE_ROLE:-security-threat-model-canon-citation}"
 deny() { echo "security-threat-model-canon-citation: refused — $1" >&2; exit 2; }
 
-case "${SECURITY_THREAT_MODEL_CANON_CITATION_GATE_OFF:-}" in
-  ""|0|false|no|off) ;;
-  *) exit 0 ;;
-esac
+gate_kill_switch_active "${SECURITY_THREAT_MODEL_CANON_CITATION_GATE_OFF:-}" || { trap - EXIT; exit 0; }
 
 command -v python3 >/dev/null 2>&1 || deny "methodology-gate.sh requires python3, which is not on PATH; denying rather than guessing."
 
@@ -52,21 +58,13 @@ if isinstance(ti,dict):
 ' 2>/dev/null || true)"
 
 _plausible() { [ -n "$1" ] && [ -d "$1" ] && { [ -e "$1/.git" ] || [ -f "$1/docs/specs/role-handoff-contract.md" ]; }; }
-_under() {
-  [ -z "$2" ] && return 0
-  python3 -c '
-import os,posixpath,sys
-r,t=sys.argv[1],sys.argv[2]
-try: rr=posixpath.normpath(os.path.realpath(r).replace("\\","/"))
-except Exception: sys.exit(1)
-n=t.replace("\\","/"); a=n if posixpath.isabs(n) else posixpath.join(rr,n)
-a=posixpath.normpath(a); real=posixpath.normpath(os.path.realpath(a).replace("\\","/"))
-sys.exit(0 if (real==rr or real.startswith(rr+"/")) else 1)
-' "$1" "$2"
-}
+# `_plausible`/root-detection stays bash-side (issue-10 proposal s3): the
+# in-root/out-of-root decision is now made once, by
+# gate_lib.gate_normalize_path in the Python judge below, so the old
+# bash-side `_under()` pre-check is gone.
 
 root=""
-if [ -n "${CLAUDE_PROJECT_DIR:-}" ] && _plausible "$CLAUDE_PROJECT_DIR" && _under "$CLAUDE_PROJECT_DIR" "$_target"; then
+if [ -n "${CLAUDE_PROJECT_DIR:-}" ] && _plausible "$CLAUDE_PROJECT_DIR"; then
   root="$(cd "$CLAUDE_PROJECT_DIR" 2>/dev/null && pwd -P)"
 fi
 if [ -z "$root" ]; then
@@ -76,40 +74,32 @@ fi
 [ -z "$root" ] && root="$(git -C "$(pwd -P)" rev-parse --show-toplevel 2>/dev/null || true)"
 [ -z "$root" ] && deny "no project root could be determined; failing closed (methodology check cannot run)."
 
-PG_PAYLOAD="$payload" PG_ROOT="$root" \
+PG_PAYLOAD="$payload" PG_ROOT="$root" GATE_LIB_PY="$GATE_LIB_PY" \
 python3 <<'PY'
 import sys as _fc_sys  # fail-closed-on-internal-error
 try:
-    import json, os, posixpath, re, sys
+    import importlib.util, json, os, posixpath, re, sys
 
     def deny(m):
         sys.stderr.write("security-threat-model-canon-citation: refused — %s\n" % m); sys.exit(2)
 
+    # core canon gate-lib.py, loaded by path (never vendored) — supplies
+    # gate_parse_json_or_deny, gate_normalize_path, gate_reconstruct_write.
+    _spec = importlib.util.spec_from_file_location("gate_lib", os.environ["GATE_LIB_PY"])
+    gate_lib = importlib.util.module_from_spec(_spec)
+    _spec.loader.exec_module(gate_lib)
+
     raw = os.environ.get("PG_PAYLOAD", "")
-    try:
-        ev = json.loads(raw) if raw else {}
-    except ValueError:
-        deny("the tool-call payload is not valid JSON; the gate cannot judge the canon-references field on an unparseable write.")
-    if not isinstance(ev, dict):
-        deny("the tool-call payload is not a JSON object; failing closed on canon-citation.")
+    ev = gate_lib.gate_parse_json_or_deny(raw, deny)
 
     tool = ev.get("tool_name")
     ti = ev.get("tool_input")
     if not isinstance(ti, dict):
         deny("tool_input is missing or not a JSON object; the gate cannot judge a write it cannot parse (canon-citation).")
 
-    root = posixpath.normpath(os.environ["PG_ROOT"].replace("\\", "/"))
+    root = posixpath.normpath(os.path.realpath(os.environ["PG_ROOT"]).replace("\\", "/"))
     PROPOSAL_RE = re.compile(r'^docs/issue-[0-9]+/proposals/.*security-threat-model.*\.md$', re.I)
     RECORD_RE = re.compile(r'^docs/issue-[0-9]+/reports/security-threat-model\.md$')
-
-    def resolve(p):
-        n = p.replace("\\", "/")
-        a = n if posixpath.isabs(n) else posixpath.join(root, n)
-        a = posixpath.normpath(a)
-        try:
-            return posixpath.normpath(os.path.realpath(a).replace("\\", "/"))
-        except OSError:
-            return a
 
     path = None
     if tool in ("Write", "Edit", "MultiEdit"):
@@ -119,10 +109,13 @@ try:
     if path is None:
         sys.exit(0)
 
-    r = resolve(path)
-    if not r.startswith(root + "/"):
+    # Absolute, relative, and `./`-prefixed file_path all normalize the same
+    # way here (core canon gate_normalize_path); None = resolves outside the
+    # project root, which is not this gate's business.
+    rel = gate_lib.gate_normalize_path(root, path)
+    if rel is None:
         sys.exit(0)
-    rel = r[len(root):].lstrip("/")
+    r = posixpath.join(root, rel) if rel else root
     if not (PROPOSAL_RE.match(rel) or RECORD_RE.match(rel)):
         sys.exit(0)  # not a security-threat-model methodology write surface — not this gate's business
 
@@ -134,31 +127,14 @@ try:
         except OSError:
             deny("%s exists but cannot be read; failing closed on canon-citation." % rel)
 
-    new_text = None
-    if tool == "Write":
-        c = ti.get("content")
-        if isinstance(c, str):
-            new_text = c
-    elif tool == "Edit":
-        o, n = ti.get("old_string"), ti.get("new_string")
-        if isinstance(o, str) and isinstance(n, str) and current is not None and o in current:
-            new_text = current.replace(o, n, 1)
-    elif tool == "MultiEdit":
-        edits = ti.get("edits")
-        text = current
-        if isinstance(edits, list) and text is not None:
-            ok = True
-            for e in edits:
-                if not isinstance(e, dict):
-                    ok = False; break
-                o, n = e.get("old_string"), e.get("new_string")
-                if not isinstance(o, str) or not isinstance(n, str) or o not in text:
-                    ok = False; break
-                text = text.replace(o, n, 1)
-            if ok:
-                new_text = text
+    # Post-write content reconstruction is core canon's
+    # gate_lib.gate_reconstruct_write (Write/Edit/MultiEdit/NotebookEdit,
+    # each edit's own replace_all honoured) — the hand-rolled
+    # `.replace(o, n, 1)` this gate used before issue-10 always replaced the
+    # first occurrence only and never saw replace_all.
+    new_text, _recon_ok = gate_lib.gate_reconstruct_write(tool, ti, current)
 
-    if new_text is None:
+    if not _recon_ok or new_text is None:
         deny(
             "this write targets %s but the gate cannot determine the resulting content "
             "from the tool input (tool=%r). Write the full document with Write, or use an "

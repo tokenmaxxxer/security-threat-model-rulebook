@@ -1,6 +1,13 @@
 #!/usr/bin/env bash
-__fc(){ rc=$?; if [ "$rc" != 0 ] && [ "$rc" != 2 ]; then echo "fail-closed: gate aborted (rc=$rc)" >&2; exit 2; fi; }
-trap __fc EXIT
+. "${CLAUDE_PLUGIN_ROOT_CORE:-$(cd "$(dirname "${BASH_SOURCE[0]}")/../../core" && pwd -P)}/hooks/lib/gate-lib.sh"
+gate_trap_fail_closed
+# ^ fail-closed trap-at-top, from core's gate-lib.sh (core issue-72, adopted
+#   here by issue-10): any abnormal termination (failed source, set -u abort,
+#   unbound var) before the verdict logic runs is forced to exit 2 (DENY),
+#   since a PreToolUse hook treats any non-2 exit as NON-BLOCKING
+#   (fail-OPEN). Installed as the FIRST executable statement, above
+#   `set -uo pipefail`. gate-lib.sh is referenced by path, never vendored;
+#   sourcing it also exports GATE_LIB_PY for the Python judge below.
 # PreToolUse gate (Write|Edit|MultiEdit) — STRIDE methodology plugin,
 # on top of (never instead of) the core canon record-fields-gate.sh's
 # generic field-presence check and the base plugin's sequence-gate.sh.
@@ -9,27 +16,32 @@ trap __fc EXIT
 # proposals) and docs/issue-<n>/reports/security-threat-model.md (phase-2
 # record) — this role's own write surfaces.
 #
-# Checks, only when a `stride-table` heading/marker is present in the
-# resulting text:
-#   (1) it must appear, positionally, after both an `asset-inventory` and a
-#       `trust-boundary-map` heading/marker in the same document — deny
-#       naming which is missing/out of order otherwise.
-#   (2) the `stride-table` section's text (from that heading to the next
-#       heading or end of doc) must contain at least one of the six STRIDE
-#       category names or their initials — deny if none found.
+# A `stride-table`/`asset-inventory`/`trust-boundary-map` "marker" is a
+# markdown heading carrying the token, or a line-start `token:` field marker
+# — never a mid-sentence prose mention (issue-10 proposal s5.1).
+#
+# Checks, only when a `stride-table` marker is present in the resulting text:
+#   (1) all three pairwise orderings of asset-inventory ->
+#       trust-boundary-map -> stride-table must hold — deny naming which is
+#       missing/out of order otherwise (issue-10 proposal s4).
+#   (2) EVERY row of the `stride-table` section (markdown table rows, or
+#       list items when the section has no table) other than the table's own
+#       header/separator row must carry one of the six STRIDE category names
+#       or an isolated initial — deny naming the first untagged row
+#       (issue-10 proposal s5.2). A section with no rows has nothing to tag
+#       and passes structurally.
 # If no `stride-table` marker exists at all, this gate is not this write's
 # business (core's generic field-presence gate handles absence) — exit 0.
 #
-# Kill switch: export SECURITY_THREAT_MODEL_STRIDE_GATE_OFF=1
+# Kill switch: export SECURITY_THREAT_MODEL_STRIDE_GATE_OFF=1 (any other value — including a typo —
+# leaves the gate ACTIVE, per gate_kill_switch_active's fixed
+# on-spelling set 1/true/yes/on).
 set -uo pipefail
 
 role="${CLAUDE_ROLE:-security-threat-model-stride}"
 deny() { echo "security-threat-model-stride: refused — $1" >&2; exit 2; }
 
-case "${SECURITY_THREAT_MODEL_STRIDE_GATE_OFF:-}" in
-  ""|0|false|no|off) ;;
-  *) exit 0 ;;
-esac
+gate_kill_switch_active "${SECURITY_THREAT_MODEL_STRIDE_GATE_OFF:-}" || { trap - EXIT; exit 0; }
 
 command -v python3 >/dev/null 2>&1 || deny "methodology-gate.sh requires python3, which is not on PATH; denying rather than guessing."
 
@@ -48,21 +60,13 @@ if isinstance(ti,dict):
 ' 2>/dev/null || true)"
 
 _plausible() { [ -n "$1" ] && [ -d "$1" ] && { [ -e "$1/.git" ] || [ -f "$1/docs/specs/role-handoff-contract.md" ]; }; }
-_under() {
-  [ -z "$2" ] && return 0
-  python3 -c '
-import os,posixpath,sys
-r,t=sys.argv[1],sys.argv[2]
-try: rr=posixpath.normpath(os.path.realpath(r).replace("\\","/"))
-except Exception: sys.exit(1)
-n=t.replace("\\","/"); a=n if posixpath.isabs(n) else posixpath.join(rr,n)
-a=posixpath.normpath(a); real=posixpath.normpath(os.path.realpath(a).replace("\\","/"))
-sys.exit(0 if (real==rr or real.startswith(rr+"/")) else 1)
-' "$1" "$2"
-}
+# `_plausible`/root-detection stays bash-side (issue-10 proposal s3): the
+# in-root/out-of-root decision is now made once, by
+# gate_lib.gate_normalize_path in the Python judge below, so the old
+# bash-side `_under()` pre-check is gone.
 
 root=""
-if [ -n "${CLAUDE_PROJECT_DIR:-}" ] && _plausible "$CLAUDE_PROJECT_DIR" && _under "$CLAUDE_PROJECT_DIR" "$_target"; then
+if [ -n "${CLAUDE_PROJECT_DIR:-}" ] && _plausible "$CLAUDE_PROJECT_DIR"; then
   root="$(cd "$CLAUDE_PROJECT_DIR" 2>/dev/null && pwd -P)"
 fi
 if [ -z "$root" ]; then
@@ -72,40 +76,32 @@ fi
 [ -z "$root" ] && root="$(git -C "$(pwd -P)" rev-parse --show-toplevel 2>/dev/null || true)"
 [ -z "$root" ] && deny "no project root could be determined; failing closed (STRIDE methodology check cannot run)."
 
-PG_PAYLOAD="$payload" PG_ROOT="$root" \
+PG_PAYLOAD="$payload" PG_ROOT="$root" GATE_LIB_PY="$GATE_LIB_PY" \
 python3 <<'PY'
 import sys as _fc_sys  # fail-closed-on-internal-error
 try:
-    import json, os, posixpath, re, sys
+    import importlib.util, json, os, posixpath, re, sys
 
     def deny(m):
         sys.stderr.write("security-threat-model-stride: refused — %s\n" % m); sys.exit(2)
 
+    # core canon gate-lib.py, loaded by path (never vendored) — supplies
+    # gate_parse_json_or_deny, gate_normalize_path, gate_reconstruct_write.
+    _spec = importlib.util.spec_from_file_location("gate_lib", os.environ["GATE_LIB_PY"])
+    gate_lib = importlib.util.module_from_spec(_spec)
+    _spec.loader.exec_module(gate_lib)
+
     raw = os.environ.get("PG_PAYLOAD", "")
-    try:
-        ev = json.loads(raw) if raw else {}
-    except ValueError:
-        deny("the tool-call payload is not valid JSON; the gate cannot judge STRIDE ordering/tagging on an unparseable write.")
-    if not isinstance(ev, dict):
-        deny("the tool-call payload is not a JSON object; failing closed on STRIDE methodology.")
+    ev = gate_lib.gate_parse_json_or_deny(raw, deny)
 
     tool = ev.get("tool_name")
     ti = ev.get("tool_input")
     if not isinstance(ti, dict):
         deny("tool_input is missing or not a JSON object; the gate cannot judge a write it cannot parse (STRIDE).")
 
-    root = posixpath.normpath(os.environ["PG_ROOT"].replace("\\", "/"))
+    root = posixpath.normpath(os.path.realpath(os.environ["PG_ROOT"]).replace("\\", "/"))
     PROPOSAL_RE = re.compile(r'^docs/issue-[0-9]+/proposals/.*security-threat-model.*\.md$', re.I)
     RECORD_RE = re.compile(r'^docs/issue-[0-9]+/reports/security-threat-model\.md$')
-
-    def resolve(p):
-        n = p.replace("\\", "/")
-        a = n if posixpath.isabs(n) else posixpath.join(root, n)
-        a = posixpath.normpath(a)
-        try:
-            return posixpath.normpath(os.path.realpath(a).replace("\\", "/"))
-        except OSError:
-            return a
 
     path = None
     if tool in ("Write", "Edit", "MultiEdit"):
@@ -115,10 +111,13 @@ try:
     if path is None:
         sys.exit(0)
 
-    r = resolve(path)
-    if not r.startswith(root + "/"):
+    # Absolute, relative, and `./`-prefixed file_path all normalize the same
+    # way here (core canon gate_normalize_path); None = resolves outside the
+    # project root, which is not this gate's business.
+    rel = gate_lib.gate_normalize_path(root, path)
+    if rel is None:
         sys.exit(0)
-    rel = r[len(root):].lstrip("/")
+    r = posixpath.join(root, rel) if rel else root
     if not (PROPOSAL_RE.match(rel) or RECORD_RE.match(rel)):
         sys.exit(0)  # not this role's write surface — not this gate's business
 
@@ -130,31 +129,14 @@ try:
         except OSError:
             deny("%s exists but cannot be read; failing closed on STRIDE methodology." % rel)
 
-    new_text = None
-    if tool == "Write":
-        c = ti.get("content")
-        if isinstance(c, str):
-            new_text = c
-    elif tool == "Edit":
-        o, n = ti.get("old_string"), ti.get("new_string")
-        if isinstance(o, str) and isinstance(n, str) and current is not None and o in current:
-            new_text = current.replace(o, n, 1)
-    elif tool == "MultiEdit":
-        edits = ti.get("edits")
-        text = current
-        if isinstance(edits, list) and text is not None:
-            ok = True
-            for e in edits:
-                if not isinstance(e, dict):
-                    ok = False; break
-                o, n = e.get("old_string"), e.get("new_string")
-                if not isinstance(o, str) or not isinstance(n, str) or o not in text:
-                    ok = False; break
-                text = text.replace(o, n, 1)
-            if ok:
-                new_text = text
+    # Post-write content reconstruction is core canon's
+    # gate_lib.gate_reconstruct_write (Write/Edit/MultiEdit/NotebookEdit,
+    # each edit's own replace_all honoured) — the hand-rolled
+    # `.replace(o, n, 1)` this gate used before issue-10 always replaced the
+    # first occurrence only and never saw replace_all.
+    new_text, _recon_ok = gate_lib.gate_reconstruct_write(tool, ti, current)
 
-    if new_text is None:
+    if not _recon_ok or new_text is None:
         deny(
             "this write targets %s but the gate cannot determine the resulting content "
             "from the tool input (tool=%r). Write the full document with Write, or use an "
@@ -162,19 +144,19 @@ try:
             "checked." % (rel, tool)
         )
 
-    # Locate heading/marker positions. A "heading/marker" is either a markdown
-    # heading line whose text contains the token, or a bare occurrence of the
-    # token itself (e.g. a field-style marker such as `stride-table:`).
+    # Locate heading/marker positions (issue-10 proposal s5.1: structural, not
+    # substring). A marker counts ONLY as either
+    #   (a) a markdown heading line whose text carries the token, or
+    #   (b) a line-start field marker, `token:` at the start of its own line.
+    # The pre-issue-10 "first bare occurrence of the token anywhere" fallback
+    # is gone: a mid-sentence mention (e.g. "관련 stride-table 논의는 나중에")
+    # is prose, not a section, and must no longer satisfy the marker.
     def find_marker(text, token):
         pat = re.compile(
-            r'(?im)^(?:#{1,6}[ \t]*.*\b' + token + r'\b.*|.*\b' + token + r'\b.*:.*)$'
+            r'(?im)^(?:#{1,6}[ \t]*.*\b' + token + r'\b.*|[ \t]*' + token + r'[ \t]*:.*)$'
         )
         m = pat.search(text)
-        if m:
-            return m.start()
-        # fallback: first bare occurrence of the token anywhere
-        m2 = re.search(r'(?i)\b' + token + r'\b', text)
-        return m2.start() if m2 else None
+        return m.start() if m else None
 
     stride_pos = find_marker(new_text, "stride-table")
     if stride_pos is None:
@@ -194,6 +176,15 @@ try:
     elif boundary_pos > stride_pos:
         missing_order.append("trust-boundary-map (present but after stride-table)")
 
+    # Third pairwise ordering (issue-10 proposal s4): asset-inventory must also
+    # precede trust-boundary-map. Before issue-10 only the two
+    # ...-> stride-table orderings were enforced, so an inverted
+    # trust-boundary-map -> asset-inventory -> stride-table document passed
+    # while violating the gate's own documented three-way order. Feeds the
+    # same missing_order list and the same single deny call below.
+    if asset_pos is not None and boundary_pos is not None and asset_pos > boundary_pos:
+        missing_order.append("asset-inventory (present but after trust-boundary-map)")
+
     if missing_order:
         deny(
             "a `stride-table` is present but the required precondition order "
@@ -202,29 +193,63 @@ try:
             "inventory and trust-boundary map must both precede the STRIDE table." % ", ".join(missing_order)
         )
 
-    # 2. stride-table section text must carry at least one STRIDE category
-    #    name or isolated initial.
+    # 2. EVERY stride-table row must carry a STRIDE category tag (issue-10
+    #    proposal s5.2). Before issue-10 this was a section-wide scan: one
+    #    "Spoofing" (or one stray isolated letter) anywhere in the section
+    #    satisfied the whole table, which is a much weaker bar than the rule
+    #    the gate itself cites. Now each row is checked on its own.
     line_end = new_text.find("\n", stride_pos)
     scan_from = line_end + 1 if line_end != -1 else len(new_text)
     next_heading = re.search(r'(?m)^#{1,6}[ \t]', new_text[scan_from:])
     section_end = scan_from + next_heading.start() if next_heading else len(new_text)
-    section_text = new_text[stride_pos:section_end]
+    section_body = new_text[scan_from:section_end]
 
     category_names = (
         "spoofing", "tampering", "repudiation",
         "information disclosure", "denial of service", "elevation of privilege",
     )
-    has_name = any(cn in section_text.lower() for cn in category_names)
-    has_initial = re.search(r'(?<![A-Za-z])[STRIDE](?![A-Za-z])', section_text) is not None
 
-    if not (has_name or has_initial):
-        deny(
-            "the `stride-table` section carries no STRIDE category tag (Spoofing, "
-            "Tampering, Repudiation, Information Disclosure, Denial of Service, "
-            "Elevation of Privilege, or an isolated S/T/R/I/D/E initial). Per "
-            "docs/issue-1/proposals/security-threat-model.md (b), every stride-table "
-            "row must carry a STRIDE category tag."
-        )
+    def tagged(row):
+        if any(cn in row.lower() for cn in category_names):
+            return True
+        return re.search(r'(?<![A-Za-z])[STRIDE](?![A-Za-z])', row) is not None
+
+    body_lines = section_body.splitlines()
+
+    # Rows are markdown table rows (lines starting with `|`); if the section
+    # contains no `|` row at all, list-item lines (`-`, `*`, or `<digit>.`)
+    # are the rows instead. A section with no rows of either shape has
+    # nothing to tag and passes structurally — "the field must be non-empty"
+    # is core's record-fields gate's job, not this one's.
+    pipe_rows = [(i, l) for i, l in enumerate(body_lines) if l.lstrip().startswith("|")]
+    if pipe_rows:
+        rows = pipe_rows
+        # The table's own header row and separator row carry column labels,
+        # not threats. The separator is the `|---|:--:|` line; the header is
+        # the row immediately above it.
+        skip = set()
+        for k, (i, l) in enumerate(rows):
+            if re.match(r'^\s*\|[\s:|\-]+\|?\s*$', l) and "-" in l:
+                skip.add(k)
+                if k > 0:
+                    skip.add(k - 1)
+        checkable = [(k, l) for k, (i, l) in enumerate(rows) if k not in skip]
+    else:
+        rows = [(i, l) for i, l in enumerate(body_lines)
+                if re.match(r'^\s*(?:[-*]|\d+\.)\s+\S', l)]
+        checkable = [(k, l) for k, (i, l) in enumerate(rows)]
+
+    for k, row in checkable:
+        if not tagged(row):
+            deny(
+                "stride-table row #%d in %s carries no STRIDE category tag (Spoofing, "
+                "Tampering, Repudiation, Information Disclosure, Denial of Service, "
+                "Elevation of Privilege, or an isolated S/T/R/I/D/E initial). Per "
+                "docs/issue-1/proposals/security-threat-model.md (b), EVERY stride-table "
+                "row must carry a STRIDE category tag — one tagged row elsewhere in the "
+                "section does not cover an untagged one. Offending row: %s"
+                % (k + 1, rel, row.strip()[:120])
+            )
 
     sys.exit(0)
 except Exception as _fc_e:  # fail-closed-on-internal-error

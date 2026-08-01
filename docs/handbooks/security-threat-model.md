@@ -110,3 +110,30 @@ reachable at hook-execution time, this role's directive/gate/hunt
 behavior will fail closed rather than silently no-op — see
 `docs/issue-2/reports/implementation.md` for the open items on how this
 repo is meant to obtain a `core` checkout.
+
+## Gate-house standard migration (issue-10)
+
+`hooks/sequence-gate.sh` and every methodology plugin's
+`hooks/methodology-gate.sh` now source `core/hooks/lib/gate-lib.sh` (bash)
+and load `core/hooks/lib/gate-lib.py` (Python, via `importlib` off the
+`GATE_LIB_PY` env var `gate-lib.sh` exports) instead of hand-rolling the
+fail-closed trap, kill-switch case statement, path normalization, and
+Edit/MultiEdit/NotebookEdit reconstruction — see
+`docs/handbooks/gate-house-standard.md` (core canon) for what the library
+provides and `docs/issue-10/proposals/security-threat-model.md` /
+`docs/issue-10/reports/security-threat-model.md` for this migration's
+scope and evidence. Every plugin's kill-switch env var now uses the fixed
+`gate_kill_switch_active` semantics: only a recognized on-spelling
+(`1`/`true`/`yes`/`on`) disables the gate — empty, a recognized
+off-spelling, or any unrecognized value all leave it active.
+
+Each plugin's `hooks/tests/run-gate-lib-tests.sh` is the mandatory
+six-case suite (replace_all-honoring Edit/MultiEdit, malformed JSON,
+unrecognized kill-switch value, absolute/`./`-prefixed paths, a
+Bash-tool write target) that `tests/run-gate-tests.sh` (repo root) now
+chains alongside each plugin's existing `directive.sh`/
+`methodology-gate.sh`/`deny-only-check.sh`/`parse-check.sh` checks.
+`core/hooks/tests/compliance-check.sh <plugin>/hooks` is the mechanical
+detector for a gate that has drifted back to hand-rolled kill-switch or
+reconstruction logic; run it against a plugin's `hooks/` directory to
+verify compliance.

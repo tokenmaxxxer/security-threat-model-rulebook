@@ -17,17 +17,57 @@ claude plugin marketplace add tokenmaxxxer/security-threat-model-rulebook
 claude plugin install security-threat-model
 ```
 
+The five methodology plugins install the same way, by name:
+`security-threat-model-stride`, `security-threat-model-risk-rating`,
+`security-threat-model-mitigation`,
+`security-threat-model-residual-signoff`,
+`security-threat-model-canon-citation`. All six are registered in
+`.claude-plugin/marketplace.json`.
+
+## Plugins
+
+| plugin | gate | kill switch |
+| --- | --- | --- |
+| `security-threat-model` (base: role identity, hand-off, phase-1 sequence precondition) | `hooks/sequence-gate.sh` | `SECURITY_THREAT_MODEL_SEQUENCE_GATE_OFF` |
+| `security-threat-model-stride` | `hooks/methodology-gate.sh` | `SECURITY_THREAT_MODEL_STRIDE_GATE_OFF` |
+| `security-threat-model-risk-rating` | `hooks/methodology-gate.sh` | `SECURITY_THREAT_MODEL_RISK_RATING_GATE_OFF` |
+| `security-threat-model-mitigation` | `hooks/methodology-gate.sh` | `SECURITY_THREAT_MODEL_MITIGATION_GATE_OFF` |
+| `security-threat-model-residual-signoff` | `hooks/methodology-gate.sh` | `SECURITY_THREAT_MODEL_RESIDUAL_SIGNOFF_GATE_OFF` |
+| `security-threat-model-canon-citation` | `hooks/methodology-gate.sh` | `SECURITY_THREAT_MODEL_CANON_CITATION_GATE_OFF` |
+
+A kill switch disables its gate only on a recognized on-spelling
+(`1`/`true`/`yes`/`on`, case-insensitive). Every other value — including a
+typo — leaves the gate **active**, per core's `gate_kill_switch_active`.
+
 ## Layout
 
-- `security-threat-model/.claude-plugin/plugin.json` — plugin manifest
-- `security-threat-model/hooks/hooks.json` — SessionStart + PreToolUse wiring
-- `security-threat-model/hooks/directive.sh` — SessionStart role directive
-- `security-threat-model/hooks/record-fields-gate.sh` — this role's record required-field gate
-- `security-threat-model/hooks/trailer-gate.sh` — commit `Subject: issue-<n>` trailer gate
-- `security-threat-model/hooks/handbook-trigger-gate.sh` — s21 handbook-sync gate
-- `security-threat-model/agents/warrant-hunter.md` — rotating-stance hunt agent
-- `docs/specs/approvers.md` — Approve-authority allowlist (see below)
+Every plugin directory carries the same shape:
 
-This is scaffolding, not a finished rulebook: fill in doctrine detail,
-handoff enforcement, and any role-specific progress gate before treating
-it as load-bearing.
+- `<plugin>/.claude-plugin/plugin.json` — plugin manifest
+- `<plugin>/hooks/hooks.json` — SessionStart + PreToolUse (`Write|Edit|MultiEdit`) wiring
+- `<plugin>/hooks/directive.sh` — SessionStart directive
+- `<plugin>/hooks/methodology-gate.sh` (base plugin: `hooks/sequence-gate.sh`) — this plugin's PreToolUse gate
+- `<plugin>/hooks/tests/run-gate-lib-tests.sh` — the six mandatory gate-house-standard cases against this plugin's gate
+- `<plugin>/hooks/tests/parse-check.sh`, `<plugin>/hooks/tests/deny-only-check.sh` — canon-scripts.md named-exception verbatim copies
+
+Base plugin only:
+
+- `security-threat-model/hooks/record-fields.env` — required-field config consumed by core's generalized record-fields gate
+- `security-threat-model/agents/warrant-hunter.md` — rotating-stance hunt agent
+
+Repo root:
+
+- `.claude-plugin/marketplace.json` — registers all six plugins
+- `tests/run-gate-tests.sh` — the test entrypoint: cross-plugin cases, then each plugin's `run-gate-lib-tests.sh` and `parse-check.sh`
+- `docs/handbooks/security-threat-model.md` — this role's handbook
+- `docs/specs/approvers.md` — Approve-authority allowlist
+
+## Core dependency
+
+Every gate sources core's `core/hooks/lib/gate-lib.sh` (and, from its Python
+judge, `core/hooks/lib/gate-lib.py` via the `GATE_LIB_PY` env var that
+sourcing exports) for the fail-closed trap, kill switch, JSON-parse-or-deny,
+absolute-path normalization, and Write/Edit/MultiEdit/NotebookEdit content
+reconstruction. Core is referenced by path, never vendored into this repo.
+Set `CLAUDE_PLUGIN_ROOT_CORE` to an installed core plugin root; the gates
+otherwise fall back to a `../../core` sibling of the plugin directory.

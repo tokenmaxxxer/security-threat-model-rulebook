@@ -1,8 +1,11 @@
 # security-threat-model-rulebook
 
 Rulebook for the `security-threat-model` role (contract v3 role-handoff protocol), split off
-per `docs/issue-160/proposals/role-taxonomy.md`'s round-3 promotion and
-generated as skeleton scaffolding by issue-170.
+per `docs/issue-160/proposals/role-taxonomy.md`'s round-3 promotion. Seeded
+as skeleton scaffolding by issue-170 and since implemented as a six-plugin
+methodology enforcement set (issue-7), migrated onto core's generalized
+gate-lib (issue-10), and brought to gate-house-standard A+ compliance
+(issue-13) — see "Plugins" and "Layout" below for the current shape.
 
 - **decides**: 신뢰 경계의 위협 표면
 - **use_when**: 스펙에 신뢰 경계·인증·민감데이터가 걸릴 때

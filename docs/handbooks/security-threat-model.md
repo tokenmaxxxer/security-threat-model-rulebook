@@ -45,6 +45,32 @@ well-defined subject without them, and the `stride-table` section must name
 at least one of the six STRIDE categories. Kill switch:
 `SECURITY_THREAT_MODEL_STRIDE_GATE_OFF`.
 
+**Per-threat fields (issue-20)** — `roles/specs/security-threat-model
+.spec.json` (marketplace, `tokenmaxxxer/on-the-record`) names seven
+required fields per threat claim: `element` (the DFD/trust-boundary
+element the threat applies to — must resolve to a named element, no
+orphan refs), `type` (the STRIDE category — this is exactly the STRIDE
+category tag this plugin already requires on every `stride-table` row,
+just under the spec's field name), `title`, `description`, `severity`
+(free text, no closed vocabulary — see `security-threat-model-risk-rating`
+below), `status` (free text, no closed vocabulary), and `mitigation` (see
+`security-threat-model-mitigation` below). `element`, `title`,
+`description`, `status`, and `mitigation` are new per-row requirements
+this plugin's gate checks on every `stride-table` row alongside the
+existing STRIDE tag: each field counts as present via a header column
+whose name contains the field word with a non-empty cell on that row, or
+via an inline `field:`/`field=` token in the row text (list-item rows,
+which have no header, use the inline-token route only). `element`
+reference-resolution (the element must resolve to something named
+elsewhere in the record) is checked by the marketplace-side
+`role-spec-reference-guard.sh`, referenced here by path/description only,
+per the `security-threat-model-canon-citation` no-copy discipline below —
+this rulebook does not fork that check. The spec's `recomputation` rule
+(residual risk must be derived per-threat, never asserted as one
+free-standing summary) is already this role's `residual-risk-note`
+convention; its `checked_by` is `TBD` upstream (marketplace issue #521
+follow-up), not something this rulebook builds ahead of.
+
 ### `security-threat-model-risk-rating` (CVSS-default / DREAD-marked-override)
 
 Owns whether DREAD-shaped language carries the `[dread-override]` marker.
@@ -93,8 +119,12 @@ core-canon-shaped fenced code), not a substitute for review. Kill switch:
   `hooks.json`.
 - `hooks/record-fields.env` — this role's required record fields
   (`RECORD_FIELDS_REQUIRED`) for core's generalized record-fields gate to
-  consume. No terminal `loop_state` divergence exists for this role today
-  (`RECORD_FIELDS_TERMINAL_STATES` unset).
+  consume. This role has no current terminal-`loop_state` divergence
+  (`RECORD_FIELDS_TERMINAL_STATES` unset) from the marketplace's 4-state
+  `loop_state` set named in `roles/specs/security-threat-model.spec.json`
+  and `roles/security-threat-model.json` (`tokenmaxxxer/on-the-record`):
+  `modeling` (progress), `landed` (terminal), `trust-boundary-undetermined`
+  (refusal), `spec-unreadable` (error).
 - `hooks/sequence-gate.sh` (PreToolUse, `Write|Edit|MultiEdit`) — the base
   plugin's own sequence-precondition gate; see the base-plugin subsection
   under Methodology above.

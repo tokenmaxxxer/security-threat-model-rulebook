@@ -40,3 +40,15 @@ Every field evaluates False even though the row plainly carries all five field l
 
 ### Expected
 Either the proposal should specify a table-cell-aware field grammar for per-row checks (distinct from the document-level heading/line-start-token marker grammar it explicitly says to reuse), or it should not claim the existing marker-detection discipline is directly reusable at the row level — as written, the rule names a marker format with no state (no document shape) in this repo that would ever produce it.
+
+## before-landing — stance 1: assume this change and another plugin's rule cancel each other — find the pair
+
+Verdict: NO FINDING
+Seed: security-threat-model-stride/hooks/methodology-gate.sh diff extending per-row check to require element/title/description/status/mitigation fields (via header column or inline `field:`/`field=` token), plus security-threat-model/hooks/record-fields.env comment update
+cap_seconds: 120
+tier: default
+diff_stat_lines: ~70
+started_at: 2026-08-09T00:00:00Z
+ended_at: 2026-08-09T00:20:00Z
+
+Checked risk-rating's `[dread-override]` marker check (regex on literal "dread"/"[dread-override]" substrings — no overlap with "status"/"element"/etc. field tokens), mitigation's `mitigation-list` disposition-vocabulary check (scoped to its own heading-delimited section; "mitigate" is not a substring of "mitigation" so the new inline `mitigation:` field token does not silently satisfy the disposition check), and record-fields.env's RECORD_FIELDS_REQUIRED (unchanged, section-presence only, orthogonal to the new row-level field check). Ran both security-threat-model-mitigation/hooks/methodology-gate.sh and security-threat-model-stride/hooks/methodology-gate.sh against the same synthetic record (stride-table row carrying all five inline field tokens; mitigation-list section with no disposition term): mitigation-list gate correctly denied (exit 2, disposition terms absent) and stride gate correctly passed (exit 0, all per-row fields present) — the two gates evaluated independently with no cancellation or swallowing of one by the other. No reproducible collision found for this stance.

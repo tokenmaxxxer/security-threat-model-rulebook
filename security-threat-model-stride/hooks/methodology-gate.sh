@@ -33,6 +33,16 @@ gate_trap_fail_closed
 #       or an isolated initial — deny naming the first untagged row
 #       (issue-10 proposal s5.2). A section with no rows has nothing to tag
 #       and passes structurally.
+#   (3) EVERY checkable row must also carry the marketplace spec's five
+#       sibling per-row fields (issue-20; roles/specs/security-threat-model
+#       .spec.json) — `element`, `title`, `description`, `status`,
+#       `mitigation` (`type` is already covered by check (2)'s STRIDE
+#       category tag). A field counts as present on a pipe-table row either
+#       via a header column whose name contains the field word (case
+#       -insensitive) with a non-empty cell at that column on the row, or
+#       via an inline `field:`/`field=` token anywhere in the row text; a
+#       list-item row (no header row exists) only has the inline-token
+#       route. Deny naming the first row missing any of the five fields.
 # If no `stride-table` marker exists at all, this gate is not this write's
 # business (core's generic field-presence gate handles absence) — exit 0.
 #
@@ -225,22 +235,44 @@ try:
     # nothing to tag and passes structurally — "the field must be non-empty"
     # is core's record-fields gate's job, not this one's.
     pipe_rows = [(i, l) for i, l in enumerate(body_lines) if l.lstrip().startswith("|")]
+    header_field_idx = {}
     if pipe_rows:
         rows = pipe_rows
         # The table's own header row and separator row carry column labels,
         # not threats. The separator is the `|---|:--:|` line; the header is
         # the row immediately above it.
         skip = set()
+        header_line = None
         for k, (i, l) in enumerate(rows):
             if re.match(r'^\s*\|[\s:|\-]+\|?\s*$', l) and "-" in l:
                 skip.add(k)
                 if k > 0:
                     skip.add(k - 1)
+                    header_line = rows[k - 1][1]
         checkable = [(k, l) for k, (i, l) in enumerate(rows) if k not in skip]
+        # issue-20: map each of the five sibling per-row fields onto a
+        # header column, if the header names one — a column whose text
+        # contains the field word (case-insensitive) counts, e.g. a
+        # "Boundary/asset" column matches `element`.
+        if header_line is not None:
+            header_cells = [c.strip().lower() for c in header_line.strip().strip("|").split("|")]
+            for field in ("element", "title", "description", "status", "mitigation"):
+                for idx, cell in enumerate(header_cells):
+                    if field in cell:
+                        header_field_idx[field] = idx
+                        break
     else:
         rows = [(i, l) for i, l in enumerate(body_lines)
                 if re.match(r'^\s*(?:[-*]|\d+\.)\s+\S', l)]
         checkable = [(k, l) for k, (i, l) in enumerate(rows)]
+
+    def row_field_present(row, field):
+        idx = header_field_idx.get(field)
+        if idx is not None:
+            cells = [c.strip() for c in row.strip().strip("|").split("|")]
+            if idx < len(cells) and cells[idx]:
+                return True
+        return re.search(r'(?i)\b' + field + r'\s*[:=]', row) is not None
 
     for k, row in checkable:
         if not tagged(row):
@@ -252,6 +284,16 @@ try:
                 "row must carry a STRIDE category tag — one tagged row elsewhere in the "
                 "section does not cover an untagged one. Offending row: %s"
                 % (k + 1, rel, row.strip()[:120])
+            )
+        missing_fields = [f for f in ("element", "title", "description", "status", "mitigation")
+                           if not row_field_present(row, f)]
+        if missing_fields:
+            deny(
+                "stride-table row #%d in %s is missing the per-threat field(s) %s required by "
+                "roles/specs/security-threat-model.spec.json (marketplace, on-the-record). A "
+                "field counts as present via a matching header column with a non-empty cell, "
+                "or an inline `field:`/`field=` token in the row. Offending row: %s"
+                % (k + 1, rel, ", ".join(missing_fields), row.strip()[:120])
             )
 
     sys.exit(0)

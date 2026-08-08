@@ -1,20 +1,4 @@
 #!/usr/bin/env bash
-__fc(){ rc=$?; if [ "$rc" != 0 ] && [ "$rc" != 2 ]; then echo "directive.sh: fail-closed: aborted (rc=$rc)" >&2; exit 0; fi; }
-trap __fc EXIT
-# SessionStart addition — risk-disposition vocabulary framing. Not a second
-# core_role_directive stub (that positional call stays solely in the base
-# `security-threat-model` plugin); this only prints phase-1 framing text so it
-# shows up in session context. Non-blocking: this is a print, not a gate, so
-# it always exits 0 on a normal run.
-set -uo pipefail
-
-cat <<'EOF'
-[security-threat-model-mitigation] Risk-disposition vocabulary rule:
-- Every `mitigation-list` entry must carry a disposition using one of the
-  four standing risk-disposition terms: accept / mitigate / transfer /
-  avoid.
-- 이 역할의 지침문은 이중 언어로 작성됩니다: 위 네 가지 용어에 대응하는
-  한국어 표현(수용 / 완화 / 전가 / 회피) 중 하나를 대신 사용해도 됩니다.
-- A mitigation-list entry with no disposition term (English or Korean) is
-  incomplete — name the disposition before moving to the next threat.
-EOF
+# SessionStart addition — risk-disposition vocabulary framing.
+. "${CLAUDE_PLUGIN_ROOT_CORE:-$(cd "$(dirname "${BASH_SOURCE[0]}")/../../core" && pwd -P)}/hooks/lib/role-directive.sh"
+core_role_directive $'YOU DECIDE: risk-disposition vocabulary for mitigation-list entries' $'USE WHEN: writing any mitigation-list entry in a security-threat-model record' $'PRODUCES: every mitigation-list entry must carry a disposition using one of the four standing risk-disposition terms: accept / mitigate / transfer / avoid (\xec\x9d\xb4 \xec\x97\xad\xed\x95\xa0\xec\x9d\x98 \xec\xa7\x80\xec\xb9\xa8\xeb\xac\xb8\xec\x9d\x80 \xec\x9d\xb4\xec\xa4\x91 \xec\x96\xb8\xec\x96\xb4\xeb\xa1\x9c \xec\x9e\x91\xec\x84\xb1\xeb\x90\xa9\xeb\x8b\x88\xeb\x8b\xa4: \xec\x88\x98\xec\x9a\xa9 / \xec\x99\x84\xed\x99\x94 / \xec\xa0\x84\xea\xb0\x80 / \xed\x9a\x8c\xed\x94\xbc \xec\xa4\x91 \xed\x95\x98\xeb\x82\x98\xeb\xa5\xbc \xeb\x8c\x80\xec\x8b\xa0 \xec\x82\xac\xec\x9a\xa9\xed\x95\xb4\xeb\x8f\x84 \xeb\x90\xa9\xeb\x8b\x88\xeb\x8b\xa4)' $'HAND-OFF: a mitigation-list entry with no disposition term (English or Korean) is incomplete — name the disposition before moving to the next threat'

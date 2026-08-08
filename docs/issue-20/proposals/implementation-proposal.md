@@ -93,12 +93,20 @@ the STRIDE plugin's existing walk-every-row logic in a second place.
 2. `security-threat-model-stride/hooks/methodology-gate.sh`: extend the
    existing per-row walk (already denies naming the first row missing a
    STRIDE category tag) to also deny naming the first row missing any of
-   `element`/`title`/`description`/`status`/`mitigation` as a
-   line-start `field:` marker or equivalent inline label — same
-   marker-detection discipline the file's docstring already states for
-   `stride-table`/`asset-inventory`/`trust-boundary-map` (heading or
-   `token:` field marker, never mid-sentence prose). Kill switch stays
-   `SECURITY_THREAT_MODEL_STRIDE_GATE_OFF`.
+   `element`/`title`/`description`/`status`/`mitigation`. The existing
+   `stride-table`/`asset-inventory`/`trust-boundary-map` marker grammar
+   (heading, or a line-start `token:` field) applies to *section*
+   markers and cannot match inside a `stride-table` row, since real rows
+   are `|`-delimited markdown table cells or list items, not
+   heading/line-start prose — reusing that grammar unmodified inside the
+   per-row check would deny every row unconditionally. The per-row check
+   therefore needs its own cell/column-based marker grammar (e.g. a
+   named column header, or an inline `field=value`/`field:` token inside
+   a cell or list item) distinct from the section-marker grammar; the
+   exact column-vs-inline convention is a phase-2 implementation detail
+   to settle against real `stride-table` examples in this repo's prior
+   issues (docs/issue-1/, docs/issue-7/), not frozen here. Kill switch
+   stays `SECURITY_THREAT_MODEL_STRIDE_GATE_OFF`.
 3. `security-threat-model-stride/hooks/tests/run-gate-lib-tests.sh`: add
    cases exercising the new per-row field checks (present/absent) inside
    the existing seven-case suite shape.

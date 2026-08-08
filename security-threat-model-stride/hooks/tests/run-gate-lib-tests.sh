@@ -72,7 +72,7 @@ Web app, DB.
 ## trust-boundary-map
 Internet -> LB -> app -> DB.
 ## stride-table
-- Spoofing: attacker forges a session token.'
+- Spoofing: attacker forges a session token. element: session-service title: token forgery description: attacker forges a session token status: open mitigation: rotate keys'
 
 RA_BASE='## asset-inventory
 Web app, DB.
@@ -174,7 +174,7 @@ Web app, DB.
 ## trust-boundary-map
 Internet -> LB -> app -> DB.
 ## stride-table
-- Spoofing: attacker forges a session token.'
+- Spoofing: attacker forges a session token. element: session-service title: token forgery description: attacker forges a session token status: open mitigation: rotate keys'
 write_case deny  "s4 regression: asset-inventory after trust-boundary-map denies" "$S4_BAD"
 write_case allow "s4: the full three-way order asset -> boundary -> stride allows" "$S4_GOOD"
 
@@ -207,11 +207,11 @@ Web app, DB.
 ## trust-boundary-map
 Internet -> LB -> app -> DB.
 ## stride-table
-| threat | category | note |
-| --- | --- | --- |
-| session forgery | Spoofing | high |
-| config edit | Tampering | high |
-| log wipe | Repudiation | medium |'
+| title | category | element | description | status | mitigation |
+| --- | --- | --- | --- | --- | --- |
+| session forgery | Spoofing | auth-service | attacker forges a session token | open | rotate session keys |
+| config edit | Tampering | config-store | attacker edits config without authorization | open | add audit log |
+| log wipe | Repudiation | audit-log | attacker deletes log entries | open | write-once storage |'
 S52_NOROWS='## asset-inventory
 Web app, DB.
 ## trust-boundary-map
@@ -221,6 +221,27 @@ Prose only; the rows land in a follow-up issue.'
 write_case deny  "s5.2 regression: one untagged row among tagged ones denies"        "$S52_BAD"
 write_case allow "s5.2: every row tagged (header/separator rows exempt) allows"      "$S52_GOOD"
 write_case allow "s5.2: a stride-table section with no rows has nothing to tag"      "$S52_NOROWS"
+
+# issue-20: per-row sibling field check (element/title/description/status/
+# mitigation), layered onto the spec's `type` = the existing STRIDE tag.
+# A field counts as present via a matching header column with a non-empty
+# cell, or an inline `field:`/`field=` token in the row.
+FIELD_BAD='## asset-inventory
+Web app, DB.
+## trust-boundary-map
+Internet -> LB -> app -> DB.
+## stride-table
+| title | category | element | description | status | mitigation |
+| --- | --- | --- | --- | --- | --- |
+| session forgery | Spoofing | auth-service | attacker forges a session token | open | |'
+FIELD_GOOD_INLINE='## asset-inventory
+Web app, DB.
+## trust-boundary-map
+Internet -> LB -> app -> DB.
+## stride-table
+- Spoofing: attacker forges a session token. element: auth-service title: session forgery description: attacker forges a session token status: open mitigation: rotate session keys'
+write_case deny  "issue-20: a stride-table row with an empty mitigation cell denies"        "$FIELD_BAD"
+write_case allow "issue-20: a list-item row with all five inline field: tokens allows"      "$FIELD_GOOD_INLINE"
 
 # --- mandatory case 7: missing-core -> CLAUDE_PLUGIN_ROOT_CORE pointed at a
 # nonexistent path must deny (exit 2), not silently allow. Regression test

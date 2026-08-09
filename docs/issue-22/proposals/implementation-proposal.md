@@ -32,6 +32,17 @@ that run when core IS reachable must not weaken.
   then caller-supplied sibling candidates, then SKIP. No network fetch
   fallback (the convention explicitly excludes this from the canonical
   contract).
+- The reachability check must match the reference implementation's
+  `_has_gate_lib` exactly: non-empty, not just present
+  (`[ -s "$cand/hooks/lib/gate-lib.sh" ]`, not `[ -f ... ]`). Every
+  script's existing `[ ! -f "$CLAUDE_PLUGIN_ROOT_CORE/hooks/lib/gate-lib.sh" ]`
+  guard is `-f`-only today, so a zero-byte/corrupted `gate-lib.sh` reads
+  as "core reachable" and every downstream gate-test case then fails
+  open with no SKIP message (confirmed via warrant-hunter dispatch,
+  docs/reports/2026-08-09-hunt-issue-22-implementation-proposal.md: 10
+  of 15 mandatory deny-cases flip to `allow` under this condition in
+  the current code). Every candidate check in the write set — env var
+  and sibling candidates alike — must switch to `-s`.
 - No vendoring the on-the-record `gates` Python package into this repo
   (survey.md's rejected-alternative reasoning) — the order and SKIP
   contract are inlined in bash, matching behavior without a new
@@ -83,7 +94,9 @@ misleading failure) without a new fragile cross-repo dependency edge.
   `echo "SKIP: core plugin unreachable — unverifiable outside spawn env" >&2; exit 75`
   — leaving the existing env-var-then-sibling-candidates resolution
   order above it unchanged (it already matches the convention's order 1
-  and 2).
+  and 2), but switching every `-f` reachability test on
+  `hooks/lib/gate-lib.sh` (env var and sibling candidates alike) to
+  `-s` (non-empty), matching the reference `_has_gate_lib`.
 - Add a one-line comment at each resolution block citing
   `docs/specs/test-env-resolution.md` (on-the-record #551) as the
   convention being followed, satisfying the grep-based acceptance

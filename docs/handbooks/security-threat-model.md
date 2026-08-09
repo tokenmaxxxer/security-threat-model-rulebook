@@ -175,3 +175,20 @@ before `gate_trap_fail_closed` is reached, so a failed source itself
 denies rather than silently falling through — see
 `docs/issue-13/proposals/security-threat-model.md` s1 and
 `docs/issue-13/reports/security-threat-model.md`.
+
+## Test-env resolution SKIP contract (issue-22)
+
+`tests/run-gate-tests.sh` and every plugin's `hooks/tests/run-gate-lib-tests.sh`
+resolve `CLAUDE_PLUGIN_ROOT_CORE` per the canonical test-env-resolution
+convention (on-the-record `docs/specs/test-env-resolution.md`, issue #551):
+env var first, then two hardcoded sibling-checkout candidates, then SKIP.
+Reachability is checked with `[ -s "$cand/hooks/lib/gate-lib.sh" ]`
+(non-empty), matching the reference `_has_gate_lib`, never `-f` alone — a
+zero-byte or corrupted `gate-lib.sh` must not read as "core reachable".
+When no candidate resolves, each script prints `SKIP: core plugin
+unreachable — unverifiable outside spawn env` to stderr and exits `75`
+instead of failing in a way indistinguishable from a real regression; the
+top-level runner's SKIP short-circuits before dispatching to per-plugin
+suites. See `docs/issue-22/proposals/implementation-proposal.md` and
+`docs/issue-22/reports/implementation.md` for the migration's scope and
+verification.

@@ -24,15 +24,19 @@ GATE="$HOOKS/sequence-gate.sh"
 # The gate sources core's gate-lib.sh via CLAUDE_PLUGIN_ROOT_CORE; this
 # harness resolves it the same way the real runtime does, since this repo
 # deliberately keeps no vendored copy of core.
+#
+# issue-22: resolution order and SKIP contract per the canonical
+# test-env-resolution convention (on-the-record docs/specs/test-env-resolution.md,
+# issue #551) — env var, then sibling candidates, then SKIP (no misleading fail).
 if [ -z "${CLAUDE_PLUGIN_ROOT_CORE:-}" ]; then
   for cand in "$HOME/tokenmaxxxer/tokenmaxxxer-core/core" \
               "$HOME/.claude/plugins/marketplaces/tokenmaxxxer/runs/rulebooks/tokenmaxxxer-core/core"; do
-    if [ -f "$cand/hooks/lib/gate-lib.sh" ]; then export CLAUDE_PLUGIN_ROOT_CORE="$cand"; break; fi
+    if [ -s "$cand/hooks/lib/gate-lib.sh" ]; then export CLAUDE_PLUGIN_ROOT_CORE="$cand"; break; fi
   done
 fi
-if [ -z "${CLAUDE_PLUGIN_ROOT_CORE:-}" ] || [ ! -f "$CLAUDE_PLUGIN_ROOT_CORE/hooks/lib/gate-lib.sh" ]; then
-  echo "run-gate-lib-tests: cannot locate core gate-lib.sh — set CLAUDE_PLUGIN_ROOT_CORE to the installed core plugin root" >&2
-  exit 1
+if [ -z "${CLAUDE_PLUGIN_ROOT_CORE:-}" ] || [ ! -s "$CLAUDE_PLUGIN_ROOT_CORE/hooks/lib/gate-lib.sh" ]; then
+  echo "SKIP: core plugin unreachable — unverifiable outside spawn env" >&2
+  exit 75
 fi
 
 pass=0; fail=0

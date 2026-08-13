@@ -58,6 +58,12 @@ Base plugin only:
 - `security-threat-model/hooks/record-fields.env` — required-field config consumed by core's generalized record-fields gate
 - `security-threat-model/agents/warrant-hunter.md` — rotating-stance hunt agent
 
+- `playbook/threat-modeling-decision-rules.md` — operational decision-rule
+  set (issue-1174): numbered condition→choice→source rules per decision
+  axis (trust-boundary scoping, asset sensitivity, STRIDE enumeration,
+  CVSS-style rating, mitigation disposition, residual-risk sign-off),
+  including subtractive/removal-category rules per axis
+
 Repo root:
 
 - `.claude-plugin/marketplace.json` — registers all six plugins

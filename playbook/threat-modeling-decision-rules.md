@@ -131,6 +131,30 @@ at enumeration time, not after the fact — an un-dispositioned finding
 list is not a complete STRIDE table for this role's record.
 Source: https://hivesecurity.gitlab.io/blog/stride-threat-modeling-practical-guide/ (fetched 2026-08-13)
 
+**Rule 3.5 — Triage an ambiguous STRIDE candidate against a fixed accept/dismiss/investigate-further question set before spending enumeration effort on it.**
+Condition: a candidate threat surfaces during enumeration whose
+applicability is genuinely unclear (not simply "feels unlikely," which
+Rule 3.2 already forbids skipping) — e.g. a data flow whose trust
+level depends on an assumption the spec does not state.
+Choice: run a short fixed set of triage questions (is the precondition
+actually present in this spec, is the affected asset actually in
+scope, is there already a documented control that closes it) and record
+which answer drove accept/dismiss/investigate-further, instead of
+silently dropping or silently keeping the candidate on gut feel — the
+disposition and its driving answer both go in the STRIDE table row, not
+just the final verdict.
+
+**Rule 5.6 — A mitigate disposition claiming an existing control must cite where that control lives in the reviewed system, not assume it from the design intent.**
+Condition: a mitigation-list entry's disposition is `mitigate` and the
+entry claims the mitigating control already exists (as opposed to being
+newly proposed).
+Choice: cite the specific file:line, config key, or infrastructure
+policy reference that implements the control before treating the
+threat as covered — a mitigate disposition resting on "the design
+calls for X" with no located implementation is not yet a mitigated
+threat; downgrade it to an open finding with a proposed (not
+implemented) control until the citation exists.
+
 ## 4. CVSS-style risk rating (axis: cvss-risk-rating)
 
 **Rule 4.1 — Rate Attack Vector by what the exploit chain requires, not by where the flaw physically executes.**
